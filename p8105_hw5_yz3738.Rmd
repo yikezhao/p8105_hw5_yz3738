@@ -147,3 +147,114 @@ From the plot we can see the observation value tend to be higher in the experime
 
 
 
+## Problem 3
+
+Write the function that performs the hypothesis test
+
+```{r}
+sample = function(n, mean, sd){
+  samp_data = tibble(
+  samp = rnorm(n, mean, sd)
+  )
+  samp_result = nest(samp_data) %>%
+  mutate(
+  t_test = map(.x = data, ~t.test(x = .x,mu=0, alternative = 'two.sided', paired = FALSE, conf.level = 0.95)),
+  tidy_ttest = map(.x = t_test, ~broom::tidy(.x))
+  ) %>% 
+  unnest(tidy_ttest) %>% 
+  select(c(estimate, p.value))
+  
+  return(samp_result)
+}
+```
+
+Simulate for 6 different means
+
+```{r}
+sim_results = 
+  tibble(miu = c(1,2,3,4,5,6)) %>% 
+  mutate(
+    output_lists = map(.x = miu, ~rerun(5000, sample(n = 30, mean = .x, sd = 5))),
+    estimate_dfs = map(output_lists, bind_rows)) %>% 
+  select(-output_lists) %>% 
+  unnest(estimate_dfs)
+```
+
+Make a plot showing the proportion of times the null was rejected (the power of the test) on the y axis and the true value of μ on the x axis. 
+
+```{r}
+plot1_df = 
+  sim_results %>% 
+  group_by(miu) %>% 
+  summarize(
+    total = n(),
+    rejected = sum(p.value < 0.05)
+  )
+```
+
+
+```{r}
+plot1_df %>% 
+  ggplot(aes(x = miu, y = rejected/total)) + 
+  geom_smooth(se = FALSE) +
+  labs(
+    title = "Power of Tests with Different Mean",
+    x = "Distribution Mean (u)",
+    y = "Proportions of Null Rejected (Power)"
+  ) +
+  scale_x_continuous(
+    breaks = c(1,2,3,4,5,6), 
+    labels = c("1", "12", "3", "4", "5", "6"))
+```
+
+The effect size is in direct proportion to power. 
+
+
+Make a plot showing the average estimate of μ̂  on the y axis and the true value of μ on the x axis. Make a second plot (or overlay on the first) the average estimate of μ̂  only in samples for which the null was rejected on the y axis and the true value of μ on the x axis.
+
+```{r}
+plot2_df = 
+  sim_results %>% 
+  group_by(miu) %>% 
+  summarize(
+    average_miu = sum(estimate)/n()
+  )
+
+plot3_df = 
+  sim_results %>% 
+  filter(p.value < 0.05) %>% 
+  group_by(miu) %>% 
+  summarize(
+    average_miu = sum(estimate)/n()
+  )
+```
+
+```{r}
+ggplot(plot2_df, aes(x = miu, y = average_miu)) + 
+  geom_smooth(se = FALSE)+
+  labs(
+    title = "Average Estimate of Tests with Different Mean",
+    x = "Distribution Mean (u)",
+    y = "Average Estimate of Miu"
+  ) +
+  scale_x_continuous(
+    breaks = c(1,2,3,4,5,6), 
+    labels = c("1", "12", "3", "4", "5", "6"))
+```
+
+
+```{r}
+ggplot(plot3_df, aes(x = miu, y = average_miu)) + 
+  geom_smooth(se = FALSE) +
+  labs(
+    title = "Average Estimate of Tests That the Null Was Rejected",
+    x = "Distribution Mean (u)",
+    y = "Average Estimate of Miu"
+  ) +
+  scale_x_continuous(
+    breaks = c(1,2,3,4,5,6), 
+    labels = c("1", "12", "3", "4", "5", "6"))
+```
+
+The sample average of μ̂  across tests for which the null is rejected is not similar to the true value of μ. Since the unrejected tests tend to be lower than the true miu.
+
